@@ -12,43 +12,70 @@ from agent.validator import validate_json
 
 import requests
 
-LLM_URL = "http://100.108.194.117:8081/v1/chat/completions"
+import os
+from dotenv import load_dotenv
 
-def call_llm(prompt):
-    print(prompt)
+load_dotenv()
+
+LLM_URL = os.environ.get("LLM_URL", "")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+
+def call_llm(messages):
+    print(messages)
+    print(f"Sending {len(messages)} messages to LLM...")
     res = requests.post(
         LLM_URL,
         headers = {
-            "Authorization": "Bearer iso3rotor2026"
+            "Authorization": f"Bearer {LLM_API_KEY}"
         },
         json={
-            "messages": [
-                {"role": "system", "content": "必ずJSONで出力"},
-                {"role": "user", "content": prompt}
-            ]
+            "messages": messages
         },
-        timeout=60
+        timeout=900
     )
-    print(res)
-
+    if res.status_code != 200:
+        print(f"Error: {res.status_code} {res.text}")
+        
     return res.json()["choices"][0]["message"]["content"]
 
 def run():
     task = input(">> ")
 
-    plan_text = plan(task)
+    messages = plan(task)
 
-    for step in range(5):
-        output = call_llm(plan_text)
-
-        action = validate_json(output)
-
-        if action["action"] == "done":
-            print("DONE")
+    for step in range(10):
+        print(f"\n--- Step {step + 1} ---")
+        try:
+            output = call_llm(messages)
+        except Exception as e:
+            print(f"LLM API Error: {e}")
             break
+            
+        print("LLM Output:", output)
+        messages.append({"role": "assistant", "content": output})
 
-        result = execute(action)
-        print(result)
+        try:
+            actions = validate_json(output)
+            
+            if any(a.get("action") == "done" for a in actions):
+                print("DONE")
+                break
+
+            results = []
+            for action in actions:
+                try:
+                    result = execute(action)
+                    results.append(f"[{action['action']} {action.get('path', '')} 実行結果]:\n{result}")
+                    print(f"Action: {action['action']} -> Success")
+                except Exception as e:
+                    results.append(f"[{action['action']} {action.get('path', '')} エラー発生]:\n{str(e)}")
+                    print(f"Action: {action['action']} -> Error: {e}")
+                    
+            messages.append({"role": "user", "content": "\n\n".join(results)})
+            
+        except Exception as e:
+            messages.append({"role": "user", "content": f"エラー発生:\n{str(e)}"})
+            print(f"Error: {e}")
 
 if __name__ == "__main__":
     run()

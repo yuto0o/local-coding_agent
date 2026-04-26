@@ -21,8 +21,9 @@ openclaw-coding-agent/
 └── run.sh
 
 ```
-# ローカルの時
+# ローカルの時（>>{自分の指示文}）
 run.sh
+
 # dockerの時
 docker build -t claw-agent .
 docker run -it claw-agent

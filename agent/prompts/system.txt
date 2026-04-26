@@ -10,9 +10,11 @@ write: ファイルを書き換える
 done: 完了
 
 フォーマット:
-{
-  "action": "read | write | done",
-  "path": "...",
-  "content": "...",
-  "reason": "..."
-}
+[
+  {
+    "action": "read | write | done",
+    "path": "...",
+    "content": "...",
+    "reason": "..."
+  }
+]
