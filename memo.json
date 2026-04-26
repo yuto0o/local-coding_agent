@@ -1,0 +1,7 @@
+[
+    {'role': 'system', 'content': 'あなたは安全なAIコーディングエージェントです。\n\nルール:\n- 必ずJSONで出力\n- 許可された操作のみ行う\n- 危険なコードは禁止\n\nread: ファイルを読む\nwrite: ファイルを書き換える\ndone: 完了\n\nフォーマット:\n{\n  "action": "read | write | done",\n  "path": "...",\n  "content": "...",\n  "reason": "..."\n
+        }'
+    },
+    {'role': 'user', 'content': '目的: ユーザーの要求に基づきコードを修正する\n\n制約:\n- Pythonのみ\n- eval禁止\n- subprocess禁止\n- OS操作禁止\n\n【現在のワークスペース構造】\nworkspace/\n  sample.py\n  app/\n    main.py\n    calc_service.py\n    utils/\n      math_utils.py\n  test/\n    test_calc.py\n\n【タスク】\nすべてのコードのおかしいところを修正し、テストが通るようにしましょう'
+    }
+]
