@@ -33,6 +33,7 @@ uv sync
 
 # 3. 環境変数の設定
 # .env ファイルを作成し、使用するLLMのURLとAPIキーを設定してください。
+# ローカルLLMは自分でサーバーを立ててください。
 cp .env.example .env
 # .env の中身を編集:
 # LLM_URL=http://.../v1/chat/completions
