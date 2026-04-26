@@ -28,6 +28,13 @@ ALLOWED_NODES = {
     ast.Attribute,
     ast.Pass,
     ast.Tuple,
+    ast.AnnAssign,
+    ast.Subscript,
+    ast.Index,
+    ast.Slice,
+    ast.List,
+    ast.Dict,
+    ast.Set,
 }
 
 def validate_code(code: str):

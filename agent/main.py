@@ -1,6 +1,6 @@
 import argparse
 from agent.planner import plan
-from agent.graph import build_graph, save_graph_image
+from agent.graph import build_graph, save_graph_image, update_progress
 
 def run():
     parser = argparse.ArgumentParser(description="AI Coding Agent")
@@ -22,8 +22,13 @@ def run():
         "require_approval": args.require_approval
     }
 
+    current_state = initial_state.copy()
     try:
-        graph.invoke(initial_state, config={"recursion_limit": 100})
+        for output in graph.stream(initial_state, config={"recursion_limit": 100}):
+            for node_name, update in output.items():
+                if update:
+                    current_state.update(update)
+                update_progress(current_state, node_name, "graph.md")
     except Exception as e:
         print(f"Agent stopped: {e}")
 

@@ -1,30 +1,62 @@
-openclaw-coding-agent/
-├── docker/
-│   └── Dockerfile
-├── agent/
-│   ├── main.py
-│   ├── planner.py
-│   ├── executor.py
-│   ├── validator.py
-│   ├── tools/
-│   │   ├── file_tool.py
-│   │   ├── shell_tool.py
-│   │   └── ast_guard.py
-│   └── prompts/
-│       ├── system.txt
-│       └── coding.txt
-├── config/
-│   └── config.yaml
-├── workspace/
-│   └── (編集対象コード)
-├── requirements.txt
-└── run.sh
+# AI Coding Agent
 
+フルスクラッチで構築された、自律型のAIコーディングエージェントです。
+指定されたタスクに基づいて、ワークスペース内のコードを自動で読み書きし、テストやLintの実行まで自律して行います。
+
+## 目的
+- 人間の開発者をサポートし、面倒なコード修正やテストコードの追加を自動化する。
+- LangGraphを用いたモダンな状態管理と、Pydantic/Ruffによる堅牢な品質保証を備えた安全なAIエージェントの実現。
+
+## 設計の特徴
+1. **LangGraphによるフロー制御**:
+   LLMの推論(`llm`)、人間の承認(`review`)、コード実行(`execute`)、Lint修正(`lint`)、エスカレーション(`human_help`)などの各処理をノードとして分割し、ループや状態を安全に管理しています。
+2. **バルク処理（一括実行）**:
+   LLMのプロンプトにワークスペースのツリー情報を含めることで、ファイル読み込みの手間を省き、一度の推論で複数のファイル書き換え（バルク処理）を実現。API遅延によるタイムアウトを回避しています。
+3. **ASTガードによる安全性（`ast_guard.py`）**:
+   AIが生成したコードを実行（`write`）する前にPythonの抽象構文木（AST）を解析し、許可された安全な構文（型ヒント、インポート、関数定義など）のみを受け入れる強固なガードを実装しています。
+4. **Pydanticバリデーションと自己修復**:
+   LLMが出力したJSONアクションをPydanticで厳密に型チェックし、不備があれば自動でLLMに再推論させます。
+5. **Ruffによる自動Lint**:
+   コード修正後、自動で `ruff check --fix` と `ruff format` を実行。残ったLintエラーはエラーメッセージとしてLLMに差し戻し、自律的に修復させます。
+
+## 環境構築手順
+
+Python 3.12以上とパッケージマネージャ `uv` が必要です。
+
+```bash
+# 1. リポジトリのクローン
+git clone <repository_url>
+cd coding-agent
+
+# 2. 依存パッケージのインストール (uvを使用)
+uv sync
+
+# 3. 環境変数の設定
+# .env ファイルを作成し、使用するLLMのURLとAPIキーを設定してください。
+cp .env.example .env
+# .env の中身を編集:
+# LLM_URL=http://.../v1/chat/completions
+# LLM_API_KEY=your_api_key
 ```
-# ローカルの時（>>{自分の指示文}）
-run.sh
 
-# dockerの時
-docker build -t claw-agent .
-docker run -it claw-agent
-``` 
+## 実行方法
+
+プロジェクトルートにある `run.sh` を使用してエージェントを起動します。
+
+```bash
+# 基本的な実行（全自動モード）
+bash run.sh
+
+# 人間の承認（HITL）を有効にして実行
+# ファイルを書き換える前に [y/n] の確認プロンプトが表示されます
+bash run.sh --require-approval
+```
+
+起動後、以下のようなプロンプトが表示されるので、指示を入力してください。
+```text
+>> {ここに指示を入力}
+```
+
+### 進捗の確認 (`graph.md`)
+エージェントが動作を開始すると、プロジェクト直下の `graph.md` ファイルがリアルタイムに更新されます。
+VSCode等でプレビューを開いておくことで、エージェントが現在どのノードにいて、どんなエラーと格闘しているかをライブで観察できます。

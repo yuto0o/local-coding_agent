@@ -1,6 +1,14 @@
 import json
+from pydantic import BaseModel, ValidationError
+from typing import Literal, Optional, List
 
-def validate_json(output: str):
+class AgentAction(BaseModel):
+    action: Literal["read", "write", "done"]
+    path: Optional[str] = ""
+    content: Optional[str] = ""
+    reason: Optional[str] = ""
+
+def validate_json(output: str) -> List[dict]:
     cleaned = output.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned[7:]
@@ -21,11 +29,12 @@ def validate_json(output: str):
     if not isinstance(data, list):
         raise Exception("ルートが配列またはオブジェクトではありません")
 
-    required = ["action", "reason"]
+    validated_data = []
+    for i, item in enumerate(data):
+        try:
+            action = AgentAction(**item)
+            validated_data.append(action.model_dump())
+        except ValidationError as e:
+            raise Exception(f"アクション形式エラー:\n{e}")
 
-    for item in data:
-        for r in required:
-            if r not in item:
-                raise Exception(f"キー不足: {r}")
-
-    return data
+    return validated_data

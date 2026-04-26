@@ -9,6 +9,7 @@ graph TD;
 	llm(llm)
 	review(review)
 	execute(execute)
+	lint(lint)
 	human_help(human_help)
 	__end__(<p>__end__</p>)
 	__start__ --> llm;

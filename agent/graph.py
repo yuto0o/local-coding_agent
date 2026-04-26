@@ -3,6 +3,7 @@ from agent.state import AgentState
 from agent.llm_client import call_llm
 from agent.validator import validate_json
 from agent.executor import execute
+import subprocess
 
 def llm_node(state: AgentState):
     messages = state["messages"].copy()
@@ -106,6 +107,42 @@ def human_help_node(state: AgentState):
         "last_error": ""
     }
 
+def lint_node(state: AgentState):
+    # Only run linting if we actually wrote something
+    actions = state.get("current_actions", [])
+    if not any(a.get("action") == "write" for a in actions):
+        return {}
+
+    messages = state["messages"].copy()
+    error_count = state.get("error_count", 0)
+    last_error = state.get("last_error", "")
+
+    # Run auto-format and auto-fix
+    subprocess.run(["uv", "run", "ruff", "format", "."], cwd="workspace", capture_output=True)
+    subprocess.run(["uv", "run", "ruff", "check", "--fix", "."], cwd="workspace", capture_output=True)
+    
+    # Check for remaining errors
+    result = subprocess.run(["uv", "run", "ruff", "check", "."], cwd="workspace", capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        error_msg = f"Lintエラーが残っています:\n{result.stdout}\n修正してください。"
+        print("Lint Error detected, feeding back to LLM...")
+        
+        if error_msg == last_error:
+            error_count += 1
+        else:
+            error_count = 1
+            last_error = error_msg
+            
+        messages.append({"role": "user", "content": error_msg})
+        return {
+            "messages": messages,
+            "last_error": last_error,
+            "error_count": error_count
+        }
+
+    return {}
+
 def route_after_llm(state: AgentState):
     if state.get("error_count", 0) >= 3:
         return "human_help"
@@ -126,6 +163,9 @@ def route_after_review(state: AgentState):
     return "execute"
 
 def route_after_execute(state: AgentState):
+    return "lint"
+
+def route_after_lint(state: AgentState):
     if state.get("error_count", 0) >= 3:
         return "human_help"
     return "llm"
@@ -135,12 +175,14 @@ def build_graph():
     builder.add_node("llm", llm_node)
     builder.add_node("review", review_node)
     builder.add_node("execute", execute_node)
+    builder.add_node("lint", lint_node)
     builder.add_node("human_help", human_help_node)
     
     builder.add_edge(START, "llm")
     builder.add_conditional_edges("llm", route_after_llm)
     builder.add_conditional_edges("review", route_after_review)
     builder.add_conditional_edges("execute", route_after_execute)
+    builder.add_conditional_edges("lint", route_after_lint)
     builder.add_edge("human_help", "llm")
     
     return builder.compile()
@@ -155,3 +197,39 @@ def save_graph_image(graph, path="graph.md"):
         print(f"グラフ構造を {path} に保存しました。")
     except Exception as e:
         print(f"グラフ保存エラー: {e}")
+
+def update_progress(state: AgentState, node_name: str, path="graph.md"):
+    try:
+        with open(path, "r") as f:
+            content = f.read()
+        
+        parts = content.split("```\n", 1)
+        if len(parts) > 0:
+            mermaid_part = parts[0] + "```\n"
+        else:
+            mermaid_part = ""
+
+        task = state.get("task", "")
+        error_count = state.get("error_count", 0)
+        messages = state.get("messages", [])
+        
+        log_text = "\n---\n## 🔄 現在のステータス\n"
+        log_text += f"- **タスク**: {task}\n"
+        log_text += f"- **最後に完了したノード**: `{node_name}`\n"
+        log_text += f"- **連続エラー回数**: {error_count}\n\n"
+        log_text += "### 📝 最新のログ\n"
+        
+        for msg in messages[-3:]:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if len(content) > 300:
+                content = content[:300] + "\n...(省略)"
+            
+            icon = "🤖" if role == "assistant" else "👤"
+            log_text += f"**{icon} {role}**:\n```\n{content}\n```\n\n"
+
+        with open(path, "w") as f:
+            f.write(mermaid_part + log_text)
+
+    except Exception as e:
+        print(f"進捗更新エラー: {e}")
