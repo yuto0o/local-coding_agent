@@ -1,0 +1,9 @@
+llm:
+  provider: openai
+
+agent:
+  max_steps: 10
+  sandbox: true
+
+paths:
+  workspace: ./workspace
