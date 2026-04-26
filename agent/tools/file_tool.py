@@ -12,4 +12,6 @@ def read_file(path):
     return (BASE / _clean_path(path)).read_text()
 
 def write_file(path, content):
-    (BASE / _clean_path(path)).write_text(content)
+    target_path = BASE / _clean_path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(content)

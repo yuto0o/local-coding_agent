@@ -5,6 +5,7 @@
 - 許可された操作のみ行う
 - 危険なコードは禁止
 - 関数を定義・修正する際は、必ず引数と戻り値にPythonの型ヒント(Type Hints)を記述すること
+- 外部パッケージ（requests, pydantic等）を使用する場合は、必ず `workspace/requirements.txt` を作成または更新してパッケージ名を追記すること
 
 read: ファイルを読む
 write: ファイルを書き換える

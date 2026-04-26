@@ -35,6 +35,17 @@ ALLOWED_NODES = {
     ast.List,
     ast.Dict,
     ast.Set,
+    ast.With,
+    ast.withitem,
+    ast.Assert,
+    ast.IfExp,
+    ast.ListComp,
+    ast.DictComp,
+    ast.SetComp,
+    ast.GeneratorExp,
+    ast.Try,
+    ast.ExceptHandler,
+    ast.Raise,
 }
 
 def validate_code(code: str):

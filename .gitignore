@@ -13,4 +13,5 @@ wheels/
 .env
 
 # workspace
-workspace/
+workspace/*
+!workspace/.gitkeep
