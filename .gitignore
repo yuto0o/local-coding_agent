@@ -15,3 +15,7 @@ wheels/
 # workspace
 workspace/*
 !workspace/.gitkeep
+
+# debug
+debug/*
+!debug/.gitkeep

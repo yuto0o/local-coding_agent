@@ -17,6 +17,8 @@ def llm_node(state: AgentState):
         print("[Node] llm_node: LLMからの応答を取得しました。")
         messages.append({"role": "assistant", "content": output})
         actions = validate_json(output)
+        if not actions:
+            raise Exception("出力に有効なアクション(JSON)が見つかりませんでした。ルールに従って出力してください。")
         return {"messages": messages, "current_actions": actions}
     except Exception as e:
         error_msg = str(e)
@@ -156,6 +158,15 @@ def lint_node(state: AgentState):
     print("[Node] lint_node: Lintチェック合格！")
     return {}
 
+def filter_pytest_output(output: str) -> str:
+    lines = output.split('\n')
+    filtered = []
+    for line in lines:
+        if ".venv" in line or "site-packages" in line or "/usr/local/lib" in line:
+            continue
+        filtered.append(line)
+    return "\n".join(filtered)
+
 def test_node(state: AgentState):
     print("\n[Node] test_node 実行開始...")
     test_files = glob.glob("workspace/**/test_*.py", recursive=True) + glob.glob("workspace/**/*_test.py", recursive=True)
@@ -173,16 +184,35 @@ def test_node(state: AgentState):
         "-w", "/workspace",
         "ghcr.io/astral-sh/uv:python3.12-bookworm-slim",
         "bash", "-c",
-        "uv pip install --system pytest && if [ -f requirements.txt ]; then uv pip install --system -r requirements.txt; fi && pytest ."
+        "uv pip install --system -q pytest && if [ -f requirements.txt ]; then uv pip install --system -q -r requirements.txt; fi && PYTHONPATH=/workspace pytest ."
     ]
     
     result = subprocess.run(docker_cmd, capture_output=True, text=True)
     
     if result.returncode != 0:
+        # pytestの出力(stdout)とエラー(stderr)を結合。
         full_output = result.stdout + "\n" + result.stderr
-        stdout = full_output[:1000] + "\n...(省略)" if len(full_output) > 1000 else full_output
-        error_msg = f"テストが失敗しました:\n{stdout}\n修正してください。"
-        print("[Node] test_node: テスト失敗！エラーをフィードバックします。")
+        
+        # エラー全文をデバッグフォルダに保存
+        from datetime import datetime
+        os.makedirs("debug", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        microsec = datetime.now().strftime("%f")[:3]
+        log_filename = f"debug/{timestamp}_{microsec}_test_error.log"
+        with open(log_filename, "w", encoding="utf-8") as f:
+            f.write(full_output)
+            
+        # ノイズ（ライブラリ内部のトレースバック）を除去
+        filtered_output = filter_pytest_output(full_output)
+            
+        # LLMには先頭1000文字と末尾3000文字を渡す（Pytestは末尾に重要なトレースバックが出るため）
+        if len(filtered_output) > 4000:
+            stdout_for_llm = filtered_output[:1000] + "\n\n...(中略)...\n\n" + filtered_output[-3000:]
+        else:
+            stdout_for_llm = filtered_output
+            
+        error_msg = f"テストが失敗しました:\n{stdout_for_llm}\n修正してください。"
+        print(f"[Node] test_node: テスト失敗！エラー全文を {log_filename} に保存しました。")
         
         messages = state["messages"].copy()
         error_count = state.get("error_count", 0)
@@ -228,21 +258,31 @@ def summarize_node(state: AgentState):
     workspace_path = Path(os.path.abspath("workspace"))
     current_workspace = get_workspace_context(workspace_path, include_contents=True)
     
+    original_user_msg = messages[1].get("content", "")
+    task_text = ""
+    if "【タスク】\n" in original_user_msg:
+        task_text = original_user_msg.split("【タスク】\n")[-1].strip()
+    else:
+        task_text = state.get("task", "タスクを完了してください。")
+
     new_user_content = (
+        "目的: ユーザーの要求に基づきコードを修正する\n\n"
+        "制約:\n"
+        "- Pythonのみ\n- eval禁止\n- subprocess禁止\n- OS操作禁止\n\n"
         "【これまでの試行錯誤の要約】\n"
         f"{summary_text}\n\n"
         "【最新のワークスペース状況】\n"
         f"{current_workspace}\n\n"
-        "上記を踏まえ、引き続きタスクを解決してください。"
+        "【タスク】\n"
+        f"{task_text}"
     )
     
     new_messages = [
         messages[0],
-        messages[1],
         {"role": "user", "content": new_user_content}
     ]
     
-    print("[Node] summarize_node: コンテキストを圧縮・リフレッシュしました！")
+    print("[Node] summarize_node: コンテキストを圧縮・リフレッシュしました！（重複を排除）")
     return {"messages": new_messages}
 
 def route_after_llm(state: AgentState):
@@ -252,6 +292,10 @@ def route_after_llm(state: AgentState):
         return "human_help"
         
     actions = state.get("current_actions", [])
+    
+    if not actions:
+        print("  -> アクションがないため llm へ差し戻し (リトライ)")
+        return "llm"
     
     # 書き込みアクションがある場合は review または execute へ
     if any(a.get("action") in ["write", "read"] for a in actions):
